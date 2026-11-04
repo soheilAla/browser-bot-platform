@@ -1,0 +1,29 @@
+services:
+  db:
+    image: postgres:17-alpine
+    container_name: bot_platform_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-browser_bot}
+      POSTGRES_DB: ${POSTGRES_DB:-browser_bot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-browser_bot} -d ${POSTGRES_DB:-browser_bot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  selenium:
+    image: selenium/standalone-chrome:4.51.0-20261010
+    container_name: browser-bot-selenium
+    shm_size: 2gb
+    ports:
+      - "127.0.0.1:4444:4444"
+      - "127.0.0.1:7900:7900"
+
+volumes:
+  pg_data:
