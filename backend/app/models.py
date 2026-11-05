@@ -1,8 +1,10 @@
 import enum
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, Enum, ForeignKey, Index, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -16,13 +18,6 @@ class RunStatus(enum.StrEnum):
     FAILED = "failed"
     BLOCKED = "blocked"
     CANCELLED = "cancelled"
-
-
-class CaptchaStatus(enum.StrEnum):
-    PENDING = "pending"
-    SOLVED = "solved"
-    NOT_SOLVED = "not_solved"
-    VERIFICATION_FAILED = "verification_failed"
 
 
 class BrowserMode(enum.StrEnum):
@@ -43,10 +38,9 @@ class Run(Base):
         Enum(RunStatus, native_enum=False),
         default=RunStatus.PENDING,
     )
-    captcha_status: Mapped[CaptchaStatus] = mapped_column(
-        Enum(CaptchaStatus, native_enum=False), default=CaptchaStatus.PENDING
+    bot_metadata: Mapped[dict[str, Any]] = mapped_column(
+        JSONB, server_default="{}", default=dict
     )
-    challenge_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
