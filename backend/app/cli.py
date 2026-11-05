@@ -70,8 +70,7 @@ async def main() -> None:
         print(f"Bot:            {r.bot_id}")
         print(f"Mode:           {r.browser_mode}")
         print(f"Status:         {r.status.upper()}")
-        print(f"Captcha Status: {r.captcha_status.upper()}")
-        print(f"Challenge ID:   {r.challenge_id or 'None'}")
+        print(f"Metadata:       {r.bot_metadata or {}}")
         print(f"Started At:     {r.started_at}")
         print(f"Finished At:    {r.finished_at}")
         if r.error_message:

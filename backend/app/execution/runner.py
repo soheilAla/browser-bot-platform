@@ -1,6 +1,7 @@
 import asyncio
 import uuid
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 
@@ -8,7 +9,7 @@ from app.bots.base import BotResult
 from app.bots.context import BotContext
 from app.bots.registry import registry
 from app.core.db import SessionLocal
-from app.models import CaptchaStatus, Run, RunEvent, RunStatus
+from app.models import Run, RunEvent, RunStatus
 
 
 async def execute_run(run_id: uuid.UUID) -> Run:
@@ -39,15 +40,17 @@ async def execute_run(run_id: uuid.UUID) -> Run:
         bot_id = run.bot_id
         browser_mode = run.browser_mode
 
-    def set_challenge_id(cid: str) -> None:
-        async def _save():
+    def update_metadata(data: dict[str, Any]) -> None:
+        async def _update():
             async with SessionLocal() as s:
                 r = await s.get(Run, run_id)
                 if r:
-                    r.challenge_id = cid
+                    current = dict(r.bot_metadata or {})
+                    current.update(data)
+                    r.bot_metadata = current
                     await s.commit()
 
-        asyncio.run_coroutine_threadsafe(_save(), loop).result()
+        asyncio.run_coroutine_threadsafe(_update(), loop).result()
 
     def log_event(event_type: str, message: str) -> None:
         async def _log():
@@ -60,7 +63,7 @@ async def execute_run(run_id: uuid.UUID) -> Run:
     context = BotContext(
         run_id=run_id,
         browser_mode=browser_mode,
-        set_challenge_id=set_challenge_id,
+        update_metadata=update_metadata,
         log=log_event,
     )
 
@@ -73,17 +76,18 @@ async def execute_run(run_id: uuid.UUID) -> Run:
     except Exception as e:
         bot_result = BotResult(
             status=RunStatus.FAILED,
-            captcha_status=CaptchaStatus.PENDING,
             message=f"Unhandled runner exception: {e}",
+            metadata={"error": str(e)},
         )
 
     async with SessionLocal() as session:
         r = await session.get(Run, run_id)
         if r:
             r.status = bot_result.status
-            r.captcha_status = bot_result.captcha_status
-            if bot_result.challenge_id:
-                r.challenge_id = bot_result.challenge_id
+            if bot_result.metadata:
+                current = dict(r.bot_metadata or {})
+                current.update(bot_result.metadata)
+                r.bot_metadata = current
             r.finished_at = datetime.now(UTC)
             r.error_message = bot_result.message
 

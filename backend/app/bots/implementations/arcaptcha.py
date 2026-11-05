@@ -9,7 +9,8 @@ from app.bots.base import BaseBot, BotResult
 from app.bots.context import BotContext
 from app.browsers.selenium_factory import create_driver
 from app.core.config import settings
-from app.models import BrowserMode, CaptchaStatus, RunStatus
+from app.models import BrowserMode, RunStatus
+from app.schemas.arcaptcha import ArcaptchaMetadata, CaptchaStatus
 
 
 class ArcaptchaBot(BaseBot):
@@ -22,8 +23,8 @@ class ArcaptchaBot(BaseBot):
         challenge_id: str | None = None
 
         try:
-            context.log("navigating", f"Navigating to {settings.target_url}")
-            driver.get(settings.target_url)
+            context.log("navigating", f"Navigating to {settings.arcaptcha_target_url}")
+            driver.get(settings.arcaptcha_target_url)
 
             # Install network listener to capture HTTP status of /api/login
             driver.execute_script("""
@@ -88,7 +89,11 @@ class ArcaptchaBot(BaseBot):
                     extract_challenge_id_from_page
                 )
                 if challenge_id:
-                    context.set_challenge_id(challenge_id)
+                    meta = ArcaptchaMetadata(
+                        challenge_id=challenge_id,
+                        captcha_status=CaptchaStatus.PENDING,
+                    ).model_dump()
+                    context.update_metadata(meta)
                     context.log(
                         "challenge_extracted", f"Extracted challenge_id: {challenge_id}"
                     )
@@ -102,11 +107,14 @@ class ArcaptchaBot(BaseBot):
             vue_text = driver.find_element(By.CSS_SELECTOR, ".arcaptcha-vue").text
             if "Blocked" in vue_text:
                 context.log("blocked", "Encountered CAPTCHA block: Are you robot?")
+                meta = ArcaptchaMetadata(
+                    challenge_id=challenge_id,
+                    captcha_status=CaptchaStatus.NOT_SOLVED,
+                ).model_dump()
                 return BotResult(
                     status=RunStatus.BLOCKED,
-                    captcha_status=CaptchaStatus.NOT_SOLVED,
-                    challenge_id=challenge_id,
                     message="Blocked by CAPTCHA anti-bot verification",
+                    metadata=meta,
                 )
 
             # Check if interactive puzzle overlay is present
@@ -118,11 +126,14 @@ class ArcaptchaBot(BaseBot):
                     context.log(
                         "blocked", "Interactive puzzle triggered in headless mode"
                     )
+                    meta = ArcaptchaMetadata(
+                        challenge_id=challenge_id,
+                        captcha_status=CaptchaStatus.NOT_SOLVED,
+                    ).model_dump()
                     return BotResult(
                         status=RunStatus.BLOCKED,
-                        captcha_status=CaptchaStatus.NOT_SOLVED,
-                        challenge_id=challenge_id,
                         message="Interactive puzzle required in headless mode",
+                        metadata=meta,
                     )
                 else:
                     context.log(
@@ -141,11 +152,14 @@ class ArcaptchaBot(BaseBot):
                         context.log(
                             "timeout", "Timed out waiting for manual puzzle solve"
                         )
+                        meta = ArcaptchaMetadata(
+                            challenge_id=challenge_id,
+                            captcha_status=CaptchaStatus.NOT_SOLVED,
+                        ).model_dump()
                         return BotResult(
                             status=RunStatus.BLOCKED,
-                            captcha_status=CaptchaStatus.NOT_SOLVED,
-                            challenge_id=challenge_id,
                             message="Timed out waiting for puzzle solution in noVNC",
+                            metadata=meta,
                         )
 
             # Enter configured username and password
@@ -239,28 +253,38 @@ class ArcaptchaBot(BaseBot):
             )
 
             if http_status == 200 or toast_success:
+                meta = ArcaptchaMetadata(
+                    challenge_id=challenge_id,
+                    captcha_status=CaptchaStatus.SOLVED,
+                ).model_dump()
                 return BotResult(
                     status=RunStatus.SUCCESS,
-                    captcha_status=CaptchaStatus.SOLVED,
-                    challenge_id=challenge_id,
                     message=f"HTTP 200 OK - {result_msg}",
+                    metadata=meta,
                 )
             else:
                 code_label = f"HTTP {http_status}" if http_status else "Failed"
+                meta = ArcaptchaMetadata(
+                    challenge_id=challenge_id,
+                    captcha_status=CaptchaStatus.VERIFICATION_FAILED,
+                ).model_dump()
                 return BotResult(
                     status=RunStatus.FAILED,
-                    captcha_status=CaptchaStatus.VERIFICATION_FAILED,
-                    challenge_id=challenge_id,
                     message=f"{code_label} - {result_msg}",
+                    metadata=meta,
                 )
 
         except Exception as e:
             context.log("error", f"Technical error during execution: {e}")
+            meta = ArcaptchaMetadata(
+                challenge_id=challenge_id,
+                captcha_status=CaptchaStatus.PENDING,
+                extra={"error": str(e)},
+            ).model_dump()
             return BotResult(
                 status=RunStatus.FAILED,
-                captcha_status=CaptchaStatus.PENDING,
-                challenge_id=challenge_id,
                 message=str(e),
+                metadata=meta,
             )
         finally:
             driver.quit()

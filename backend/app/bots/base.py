@@ -1,16 +1,16 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Any
 
 from app.bots.context import BotContext
-from app.models import CaptchaStatus, RunStatus
+from app.models import RunStatus
 
 
 @dataclass
 class BotResult:
     status: RunStatus
-    captcha_status: CaptchaStatus
-    challenge_id: str | None = None
     message: str | None = None
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseBot(ABC):
