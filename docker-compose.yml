@@ -23,8 +23,9 @@ services:
     container_name: browser-bot-selenium
     shm_size: 2gb
     environment:
+      SE_NODE_MAX_SESSIONS: "2"
       SE_NODE_SESSION_TIMEOUT: "3600"
-      SE_SESSION_REQUEST_TIMEOUT: "30"
+      SE_SESSION_REQUEST_TIMEOUT: "60"
     ports:
       - "127.0.0.1:4444:4444"
       - "127.0.0.1:7900:7900"
@@ -44,6 +45,7 @@ services:
         condition: service_healthy
 
   api:
+    build: ./backend
     image: browser-bot-backend:latest
     container_name: bot_platform_api
     restart: unless-stopped

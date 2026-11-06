@@ -6,7 +6,7 @@ WORKDIR /app
 
 COPY pyproject.toml uv.lock ./
 
-RUN uv sync --frozen --no-dev --no-install-project
+RUN uv sync --frozen --no-install-project
 
 FROM python:3.13-slim
 
@@ -19,9 +19,10 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
-COPY alembic.ini ./
+COPY pyproject.toml alembic.ini ./
 COPY migrations ./migrations
 COPY app ./app
+COPY tests ./tests
 
 EXPOSE 8000
 
