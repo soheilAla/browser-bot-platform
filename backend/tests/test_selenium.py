@@ -10,6 +10,6 @@ def test_selenium_connection() -> None:
     driver = create_driver(BrowserMode.HEADLESS, settings.selenium_remote_url)
     try:
         driver.get("https://example.com")
-        assert "Example" in driver.title
+        assert "example" in driver.title.lower()
     finally:
         driver.quit()

@@ -32,5 +32,48 @@ services:
       - "127.0.0.1:4444:4444"
       - "127.0.0.1:7900:7900"
 
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: browser-bot-backend:latest
+    container_name: bot_platform_api
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-browser_bot}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-browser_bot}
+      SELENIUM_REMOTE_URL: http://selenium:4444
+      ARCAPTCHA_USERNAME: ${ARCAPTCHA_USERNAME}
+      ARCAPTCHA_PASSWORD: ${ARCAPTCHA_PASSWORD}
+      ARCAPTCHA_TARGET_URL: ${ARCAPTCHA_TARGET_URL:-https://demo.arcaptcha.co}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/api/health\")'"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  worker:
+    image: browser-bot-backend:latest
+    container_name: bot_platform_worker
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-browser_bot}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-browser_bot}
+      SELENIUM_REMOTE_URL: http://selenium:4444
+      ARCAPTCHA_USERNAME: ${ARCAPTCHA_USERNAME}
+      ARCAPTCHA_PASSWORD: ${ARCAPTCHA_PASSWORD}
+      ARCAPTCHA_TARGET_URL: ${ARCAPTCHA_TARGET_URL:-https://demo.arcaptcha.co}
+    command: python -m app.execution.worker
+    depends_on:
+      api:
+        condition: service_healthy
+      selenium:
+        condition: service_started
+      db:
+        condition: service_healthy
+
 volumes:
   pg_data:

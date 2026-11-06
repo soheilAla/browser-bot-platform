@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: browser_bot
+          POSTGRES_DB: browser_bot
+          POSTGRES_PASSWORD: testpassword
+        ports:
+          - "5434:5432"
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python 3.13
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        working-directory: backend
+        run: uv sync --locked --python 3.13
+
+      - name: Lint with Ruff
+        working-directory: backend
+        run: uv run ruff check .
+
+      - name: Run database migrations
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://browser_bot:testpassword@localhost:5434/browser_bot
+        run: uv run alembic upgrade head
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql+asyncpg://browser_bot:testpassword@localhost:5434/browser_bot
+          SELENIUM_REMOTE_URL: http://localhost:4444
+        run: uv run pytest -m "not selenium"
