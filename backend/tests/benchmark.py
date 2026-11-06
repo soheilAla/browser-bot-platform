@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 
+from app.bots.settings.arcaptcha import bot_settings
 from app.browsers.selenium_factory import create_driver
 from app.core.config import settings
 from app.models import BrowserMode
@@ -17,7 +18,7 @@ from app.models import BrowserMode
 def run_benchmark(trials: int = 5, mode: BrowserMode = BrowserMode.HEADFUL) -> None:
     print("=" * 65)
     print(f"🔬 ARCAPTCHA STEALTH BENCHMARK ({trials} TRIALS)")
-    print(f"Target: {settings.arcaptcha_target_url} | Mode: {mode.value}")
+    print(f"Target: {bot_settings.target_url} | Mode: {mode.value}")
     print("=" * 65)
 
     results = []
@@ -29,7 +30,7 @@ def run_benchmark(trials: int = 5, mode: BrowserMode = BrowserMode.HEADFUL) -> N
         detail = ""
 
         try:
-            driver.get(settings.arcaptcha_target_url)
+            driver.get(bot_settings.target_url)
             wait = WebDriverWait(driver, 10)
 
             box = wait.until(

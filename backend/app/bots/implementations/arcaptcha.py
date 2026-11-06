@@ -1,5 +1,3 @@
-import time
-
 from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions as EC
@@ -7,6 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 
 from app.bots.base import BaseBot, BotResult
 from app.bots.context import BotContext
+from app.bots.settings.arcaptcha import bot_settings
 from app.browsers.selenium_factory import create_driver
 from app.core.config import settings
 from app.models import BrowserMode, RunStatus
@@ -18,13 +17,13 @@ class ArcaptchaBot(BaseBot):
     name = "Arcaptcha Demo"
 
     def run(self, context: BotContext) -> BotResult:
-        driver = create_driver(self.browser_mode, settings.selenium_remote_url)
+        driver = create_driver(context.browser_mode, settings.selenium_remote_url)
         wait = WebDriverWait(driver, 15)
         challenge_id: str | None = None
 
         try:
-            context.log("navigating", f"Navigating to {settings.arcaptcha_target_url}")
-            driver.get(settings.arcaptcha_target_url)
+            context.log("navigating", f"Navigating to {bot_settings.target_url}")
+            driver.get(bot_settings.target_url)
 
             # Install network listener to capture HTTP status of /api/login
             driver.execute_script("""
@@ -102,10 +101,10 @@ class ArcaptchaBot(BaseBot):
                     "challenge_missing", "Failed to obtain challenge_id within timeout"
                 )
 
-            # Check for immediate block
-            time.sleep(2)
-            vue_text = driver.find_element(By.CSS_SELECTOR, ".arcaptcha-vue").text
-            if "Blocked" in vue_text:
+            vue_el = wait.until(
+                EC.presence_of_element_located((By.CSS_SELECTOR, ".arcaptcha-vue"))
+            )
+            if "Blocked" in vue_el.text:
                 context.log("blocked", "Encountered CAPTCHA block: Are you robot?")
                 meta = ArcaptchaMetadata(
                     challenge_id=challenge_id,
@@ -117,12 +116,11 @@ class ArcaptchaBot(BaseBot):
                     metadata=meta,
                 )
 
-            # Check if interactive puzzle overlay is present
             puzzle_overlays = driver.find_elements(
                 By.ID, "arcaptcha_full_body_container"
             )
             if puzzle_overlays and puzzle_overlays[0].is_displayed():
-                if self.browser_mode == BrowserMode.HEADLESS:
+                if context.browser_mode == BrowserMode.HEADLESS:
                     context.log(
                         "blocked", "Interactive puzzle triggered in headless mode"
                     )
@@ -162,14 +160,13 @@ class ArcaptchaBot(BaseBot):
                             metadata=meta,
                         )
 
-            # Enter configured username and password
             email = wait.until(EC.visibility_of_element_located((By.ID, "email")))
             email.clear()
-            email.send_keys(settings.arcaptcha_username)
+            email.send_keys(bot_settings.username)
 
-            password = driver.find_element(By.ID, "password")
+            password = wait.until(EC.visibility_of_element_located((By.ID, "password")))
             password.clear()
-            password.send_keys(settings.arcaptcha_password)
+            password.send_keys(bot_settings.password)
             context.log(
                 "credentials_entered", "Entered configured credentials into form"
             )
@@ -193,8 +190,8 @@ class ArcaptchaBot(BaseBot):
                     return resp
                 # Fallback: check PerformanceResourceTiming
                 perf_status = d.execute_script("""
-                    let entries = performance.getEntriesByName(
-                        'https://demo.arcaptcha.co/api/login'
+                    let entries = performance.getEntriesByType('resource').filter(
+                        function(e) { return e.name.indexOf('/api/login') !== -1; }
                     );
                     if (entries.length > 0 && entries[0].responseStatus) {
                         return { status: entries[0].responseStatus, body: '' };
@@ -217,7 +214,6 @@ class ArcaptchaBot(BaseBot):
                     "http_timeout", "Timed out waiting for /api/login HTTP response"
                 )
 
-            # Check UI Toast message
             toast_text: str | None = None
             toast_success: bool = False
             try:
@@ -252,7 +248,7 @@ class ArcaptchaBot(BaseBot):
                 toast_text or response_body or f"HTTP {http_status or 'unknown'}"
             )
 
-            if http_status == 200 or toast_success:
+            if http_status == 200 and toast_success:
                 meta = ArcaptchaMetadata(
                     challenge_id=challenge_id,
                     captcha_status=CaptchaStatus.SOLVED,
@@ -278,8 +274,7 @@ class ArcaptchaBot(BaseBot):
             context.log("error", f"Technical error during execution: {e}")
             meta = ArcaptchaMetadata(
                 challenge_id=challenge_id,
-                captcha_status=CaptchaStatus.PENDING,
-                extra={"error": str(e)},
+                captcha_status=CaptchaStatus.UNKNOWN,
             ).model_dump()
             return BotResult(
                 status=RunStatus.FAILED,
