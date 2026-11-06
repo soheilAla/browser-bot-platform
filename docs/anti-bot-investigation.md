@@ -156,6 +156,17 @@ Using the AI agent to trace detectors in `checkbox.js`, I isolated 4 signals tha
 - **Cause:** Instantaneous programmatic clicks produce empty `mouse_tracking: []` arrays and duration `< 300ms` in Bowman telemetry.
 - **Fix:** Implemented natural element focusing and pre-click delays in the bot automation workflow.
 
+### Note: Headless Screen Anomaly & User-Agent (`Uv.windowSize` & `Uv.userAgent`)
+
+- **Cause:** In headless mode (`--headless=new`), Chrome automatically:
+  1. Injected `HeadlessChrome/155.0.0.0` into the User-Agent header.
+  2. Defaulted `screen.width = 800` and `screen.height = 600` while `--window-size` was 1920x1080 (creating an impossible physical condition where the browser window was larger than the monitor).
+  3. Defaulted `Notification.permission = "denied"`.
+- **Fix:** In `app/browsers/selenium_factory.py`, when in headless mode:
+  1. Override User-Agent with a standard Chrome release string.
+  2. Inject CDP hook aligning `Screen.prototype` width/height to 1920x1080.
+  3. Set `Notification.permission = "default"`.
+
 ---
 
 ## 6. Empirical Benchmark & Reproducibility (Bonus Evidence)
@@ -178,7 +189,7 @@ To evaluate which specific changes caused the block vs. unblock, I tested each c
 Reviewers can verify the 100% unblocked rate directly from `backend/`:
 
 ```bash
-uv run python tests/benchmark.py --trials 5
+uv run python tests/benchmark.py --trials 10
 ```
 
 ---

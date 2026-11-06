@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ArcaptchaBotSettings(BaseSettings):
-    username: str
+    email: str
     password: str
     target_url: str
     model_config = SettingsConfigDict(

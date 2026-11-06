@@ -52,7 +52,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-browser_bot}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-browser_bot}
       SELENIUM_REMOTE_URL: http://selenium:4444
-      ARCAPTCHA_USERNAME: ${ARCAPTCHA_USERNAME}
+      ARCAPTCHA_EMAIL: ${ARCAPTCHA_EMAIL}
       ARCAPTCHA_PASSWORD: ${ARCAPTCHA_PASSWORD}
       ARCAPTCHA_TARGET_URL: ${ARCAPTCHA_TARGET_URL:-https://demo.arcaptcha.co}
     depends_on:
@@ -73,7 +73,7 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-browser_bot}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-browser_bot}
       SELENIUM_REMOTE_URL: http://selenium:4444
-      ARCAPTCHA_USERNAME: ${ARCAPTCHA_USERNAME}
+      ARCAPTCHA_EMAIL: ${ARCAPTCHA_EMAIL}
       ARCAPTCHA_PASSWORD: ${ARCAPTCHA_PASSWORD}
       ARCAPTCHA_TARGET_URL: ${ARCAPTCHA_TARGET_URL:-https://demo.arcaptcha.co}
     command: python -m app.execution.worker

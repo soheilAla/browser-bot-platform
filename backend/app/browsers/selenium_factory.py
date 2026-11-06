@@ -13,6 +13,11 @@ def create_driver(
 
     if browser_mode == BrowserMode.HEADLESS:
         options.add_argument("--headless=new")
+        # Strip HeadlessChrome token from User-Agent
+        options.add_argument(
+            "--user-agent=Mozilla/5.0 (X11; Linux x86_64) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36"
+        )
 
     # Explicit resolution required for headless Linux/Docker
     options.add_argument("--window-size=1920,1080")
@@ -28,7 +33,29 @@ def create_driver(
     options.add_argument("--ignore-gpu-blocklist")
     options.add_argument("--enable-webgl")
 
-    return webdriver.Remote(
+    driver = webdriver.Remote(
         command_executor=remote_url,
         options=options,
     )
+
+    if browser_mode == BrowserMode.HEADLESS:
+        # Align screen resolution and permissions to eliminate headless anomalies
+        driver.execute_cdp_cmd(
+            "Page.addScriptToEvaluateOnNewDocument",
+            {
+                "source": """
+                    const setProp = (obj, prop, val) =>
+                        Object.defineProperty(obj, prop, { get: () => val });
+                    setProp(Screen.prototype, 'width', 1920);
+                    setProp(Screen.prototype, 'height', 1080);
+                    setProp(Screen.prototype, 'availWidth', 1920);
+                    setProp(Screen.prototype, 'availHeight', 1058);
+
+                    if (window.Notification) {
+                        setProp(Notification, 'permission', 'default');
+                    }
+                """
+            },
+        )
+
+    return driver
