@@ -53,7 +53,7 @@ async def execute_run(run_id: uuid.UUID) -> Run:
                     r.bot_metadata = current
                     await s.commit()
 
-        asyncio.run_coroutine_threadsafe(_update(), loop).result()
+        asyncio.run_coroutine_threadsafe(_update(), loop).result(timeout=10.0)
 
     def log_event(event_type: str, message: str) -> None:
         async def _log():
@@ -61,7 +61,7 @@ async def execute_run(run_id: uuid.UUID) -> Run:
                 s.add(RunEvent(run_id=run_id, event_type=event_type, message=message))
                 await s.commit()
 
-        asyncio.run_coroutine_threadsafe(_log(), loop).result()
+        asyncio.run_coroutine_threadsafe(_log(), loop).result(timeout=10.0)
 
     context = BotContext(
         run_id=run_id,

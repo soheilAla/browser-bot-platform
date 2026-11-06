@@ -10,6 +10,7 @@ An extensible web platform for running and monitoring browser bots with persiste
 
 - Docker Engine 24+ & Docker Compose v2
 - Linux, macOS, or Windows (WSL2)
+- 2 CPU cores minimum
 - 4 GB RAM minimum (`/dev/shm` 2 GB allocated for Chrome)
 
 ### Setup
@@ -51,7 +52,7 @@ docker compose ps
 2. Select **Arcaptcha Demo (`arcaptcha`)** from the dropdown.
 3. Choose **Headful** or **Headless** mode, then click **Trigger Run**.
 4. Click on any run row in the history table to inspect details:
-   - Status (`SUCCESS`, `BLOCKED`, `FAILED`)
+   - Status
    - Duration and timestamps
    - Extracted `challenge_id` and `captcha_status`
    - Real-time audit event timeline
@@ -61,11 +62,12 @@ docker compose ps
 The browser runs inside an Xvfb virtual display exported via noVNC on port `7900`:
 
 - **Desktop:** Open `http://localhost:7900/?autoconnect=1` directly in your browser (default password is "secret").
-- **Remote Server / VPS:** Forward port 7900 over SSH from your laptop:
+
+- **Remote Server / VPS:** Forward Web UI (3000), API docs (8000), and noVNC (7900) over SSH from your laptop:
   ```bash
-  ssh -N -L 3000:127.0.0.1:3000 -L 7900:127.0.0.1:7900 user@<VPS_IP>
+  ssh -N -L 3000:127.0.0.1:3000 -L 8000:127.0.0.1:8000 -L 7900:127.0.0.1:7900 user@<VPS_IP>
   ```
-  Then open `http://localhost:7900/?autoconnect=1` locally.
+  Then open `http://localhost:3000`, `http://localhost:8000/docs`, and `http://localhost:7900/?autoconnect=1` locally.
 
 _Note on interactive challenges:_ In headful mode, if a puzzle modal appears, the bot pauses and waits up to 45 seconds for a manual solve in the viewer before proceeding with form submission. In headless mode, it records the extracted `challenge_id` and safely reports the outcome.
 

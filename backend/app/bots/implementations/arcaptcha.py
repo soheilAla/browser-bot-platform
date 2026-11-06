@@ -133,6 +133,18 @@ class ArcaptchaBot(BaseBot):
             self._click_checkbox(driver, wait, context)
 
             challenge_id = self._extract_challenge(driver, wait, context)
+            if not challenge_id:
+                return BotResult(
+                    status=RunStatus.FAILED,
+                    message=(
+                        "Failed to extract challenge_id from CAPTCHA widget "
+                        "within timeout"
+                    ),
+                    metadata=ArcaptchaMetadata(
+                        challenge_id=None,
+                        captcha_status=CaptchaStatus.NOT_SOLVED,
+                    ).model_dump(),
+                )
 
             early_exit = self._handle_challenge_gate(
                 driver, wait, context, challenge_id
