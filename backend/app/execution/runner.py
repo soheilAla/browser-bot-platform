@@ -13,7 +13,6 @@ from app.models import Run, RunEvent, RunStatus
 
 
 async def execute_run(run_id: uuid.UUID) -> Run:
-    """Execute a run with lifecycle tracking and immediate DB persistence."""
     loop = asyncio.get_running_loop()
 
     async with SessionLocal() as session:
@@ -22,8 +21,12 @@ async def execute_run(run_id: uuid.UUID) -> Run:
         if not run:
             raise ValueError(f"Run {run_id} not found")
 
-        run.status = RunStatus.RUNNING
-        run.started_at = datetime.now(UTC)
+        if run.status != RunStatus.RUNNING:
+            raise ValueError(
+                f"Run {run_id} is not eligible for execution: status is '{run.status}',"
+                f" expected '{RunStatus.RUNNING}' (must be claimed by worker first)"
+            )
+
         session.add(
             RunEvent(
                 run_id=run_id,
@@ -68,7 +71,7 @@ async def execute_run(run_id: uuid.UUID) -> Run:
     )
 
     bot_class = registry.get(bot_id)
-    bot = bot_class(browser_mode=browser_mode)
+    bot = bot_class()
 
     # Run bot in thread to keep asyncio event loop responsive
     try:
@@ -77,7 +80,7 @@ async def execute_run(run_id: uuid.UUID) -> Run:
         bot_result = BotResult(
             status=RunStatus.FAILED,
             message=f"Unhandled runner exception: {e}",
-            metadata={"error": str(e)},
+            metadata={},
         )
 
     async with SessionLocal() as session:
@@ -89,7 +92,9 @@ async def execute_run(run_id: uuid.UUID) -> Run:
                 current.update(bot_result.metadata)
                 r.bot_metadata = current
             r.finished_at = datetime.now(UTC)
-            r.error_message = bot_result.message
+            r.error_message = (
+                bot_result.message if bot_result.status != RunStatus.SUCCESS else None
+            )
 
             session.add(
                 RunEvent(
