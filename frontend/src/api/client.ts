@@ -19,9 +19,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       if (errorData.detail) {
         errorMessage = errorData.detail;
       }
-    } catch {
-      // Use fallback error message
-    }
+    } catch {}
     throw new Error(errorMessage);
   }
 
