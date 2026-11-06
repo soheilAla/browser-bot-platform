@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  backend:
     runs-on: ubuntu-latest
 
     services:
@@ -50,9 +50,32 @@ jobs:
           DATABASE_URL: postgresql+asyncpg://browser_bot:testpassword@localhost:5434/browser_bot
         run: uv run alembic upgrade head
 
-      - name: Run tests
-        working-directory: backend
-        env:
-          DATABASE_URL: postgresql+asyncpg://browser_bot:testpassword@localhost:5434/browser_bot
-          SELENIUM_REMOTE_URL: http://localhost:4444
-        run: uv run pytest -m "not selenium"
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 12
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: "pnpm"
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint with Biome
+        working-directory: frontend
+        run: pnpm lint
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build

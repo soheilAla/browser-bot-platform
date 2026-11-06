@@ -25,7 +25,6 @@ services:
     environment:
       SE_NODE_SESSION_TIMEOUT: "3600"
       SE_SESSION_REQUEST_TIMEOUT: "30"
-      TZ: Asia/Tehran
     ports:
       - "127.0.0.1:4444:4444"
       - "127.0.0.1:7900:7900"
@@ -79,12 +78,25 @@ services:
       ARCAPTCHA_TARGET_URL: ${ARCAPTCHA_TARGET_URL:-https://demo.arcaptcha.co}
     command: python -m app.execution.worker
     depends_on:
-      db:
+      api:
         condition: service_healthy
-      migration:
-        condition: service_completed_successfully
       selenium:
         condition: service_started
+      db:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    image: browser-bot-frontend:latest
+    container_name: bot_platform_frontend
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:3000:80"
+    depends_on:
+      api:
+        condition: service_healthy
 
 volumes:
   pg_data:

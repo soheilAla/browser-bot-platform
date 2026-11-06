@@ -1,3 +1,4 @@
+# Backend
 .venv/
 __pycache__/
 *.pyc
@@ -9,3 +10,12 @@ __pycache__/
 .env.*
 !.env.example
 tests/
+
+# Frontend
+node_modules
+dist
+.git
+.DS_Store
+*.local
+tsconfig.tsbuildinfo
+tsconfig.node.tsbuildinfo
