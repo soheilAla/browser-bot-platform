@@ -13,7 +13,7 @@ async def test_queue_claiming_order_and_atomicity() -> None:
         await session.commit()
 
         run_1 = Run(
-            bot_id="arcaptcha",
+            bot_id="test_bot",
             browser_mode=BrowserMode.HEADFUL,
             status=RunStatus.PENDING,
             bot_metadata={"order": 1},
@@ -24,7 +24,7 @@ async def test_queue_claiming_order_and_atomicity() -> None:
         id_1 = run_1.id
 
         run_2 = Run(
-            bot_id="arcaptcha",
+            bot_id="test_bot",
             browser_mode=BrowserMode.HEADLESS,
             status=RunStatus.PENDING,
             bot_metadata={"order": 2},
@@ -34,27 +34,32 @@ async def test_queue_claiming_order_and_atomicity() -> None:
         await session.refresh(run_2)
         id_2 = run_2.id
 
-    claimed_1 = await claim_next_run(worker_id="test-worker-A")
-    assert claimed_1 == id_1
+    try:
+        claimed_1 = await claim_next_run(worker_id="test-worker-A")
+        assert claimed_1 == id_1
 
-    async with SessionLocal() as session:
-        r1 = await session.get(Run, id_1)
-        assert r1 is not None
-        assert r1.status == RunStatus.RUNNING
-        assert r1.started_at is not None
+        async with SessionLocal() as session:
+            r1 = await session.get(Run, id_1)
+            assert r1 is not None
+            assert r1.status == RunStatus.RUNNING
+            assert r1.started_at is not None
 
-        event = (
-            await session.execute(
-                select(RunEvent).where(
-                    RunEvent.run_id == id_1, RunEvent.event_type == "claimed"
+            event = (
+                await session.execute(
+                    select(RunEvent).where(
+                        RunEvent.run_id == id_1, RunEvent.event_type == "claimed"
+                    )
                 )
-            )
-        ).scalar_one_or_none()
-        assert event is not None
-        assert "test-worker-A" in event.message
+            ).scalar_one_or_none()
+            assert event is not None
+            assert "test-worker-A" in event.message
 
-    claimed_2 = await claim_next_run(worker_id="test-worker-B")
-    assert claimed_2 == id_2
+        claimed_2 = await claim_next_run(worker_id="test-worker-B")
+        assert claimed_2 == id_2
+    finally:
+        async with SessionLocal() as session:
+            await session.execute(delete(Run).where(Run.id.in_([id_1, id_2])))
+            await session.commit()
 
 
 @pytest.mark.asyncio
@@ -72,7 +77,7 @@ async def test_queue_claim_empty_returns_none() -> None:
 async def test_recover_stale_runs_on_worker_startup() -> None:
     async with SessionLocal() as session:
         stale_run = Run(
-            bot_id="arcaptcha",
+            bot_id="test_bot",
             browser_mode=BrowserMode.HEADFUL,
             status=RunStatus.RUNNING,
             bot_metadata={"crashed": True},
@@ -82,23 +87,29 @@ async def test_recover_stale_runs_on_worker_startup() -> None:
         await session.refresh(stale_run)
         stale_id = stale_run.id
 
-    recovered_count = await recover_stale_runs(worker_id="rebooted-worker-1")
-    assert recovered_count >= 1
+    try:
+        recovered_count = await recover_stale_runs(worker_id="rebooted-worker-1")
+        assert recovered_count >= 1
 
-    async with SessionLocal() as session:
-        r = await session.get(Run, stale_id)
-        assert r is not None
-        assert r.status == RunStatus.FAILED
-        assert r.finished_at is not None
-        assert r.error_message is not None
-        assert "interrupted" in r.error_message.lower()
+        async with SessionLocal() as session:
+            r = await session.get(Run, stale_id)
+            assert r is not None
+            assert r.status == RunStatus.FAILED
+            assert r.finished_at is not None
+            assert r.error_message is not None
+            assert "interrupted" in r.error_message.lower()
 
-        event = (
-            await session.execute(
-                select(RunEvent).where(
-                    RunEvent.run_id == stale_id, RunEvent.event_type == "interrupted"
+            event = (
+                await session.execute(
+                    select(RunEvent).where(
+                        RunEvent.run_id == stale_id,
+                        RunEvent.event_type == "interrupted",
+                    )
                 )
-            )
-        ).scalar_one_or_none()
-        assert event is not None
-        assert "interrupted by worker restart" in event.message.lower()
+            ).scalar_one_or_none()
+            assert event is not None
+            assert "interrupted by worker restart" in event.message.lower()
+    finally:
+        async with SessionLocal() as session:
+            await session.execute(delete(Run).where(Run.id == stale_id))
+            await session.commit()

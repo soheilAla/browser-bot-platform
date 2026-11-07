@@ -13,6 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: "select-run", run: Run): void;
+  (e: "cancel-run", run: Run): void;
   (e: "filter-status", status: RunStatus | "all"): void;
   (e: "page-change", page: number): void;
   (e: "refresh"): void;
@@ -25,6 +26,7 @@ const statuses: { label: string; value: RunStatus | "all" }[] = [
   { label: "Success", value: "success" },
   { label: "Blocked", value: "blocked" },
   { label: "Failed", value: "failed" },
+  { label: "Cancelled", value: "cancelled" },
 ];
 
 function formatDate(dateStr: string | null): string {
@@ -44,19 +46,19 @@ function truncateId(id: string): string {
 
 <template>
   <div class="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden flex flex-col">
-    <div class="p-5 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-      <div>
-        <h2 class="text-base font-semibold text-slate-900 tracking-tight">Execution History</h2>
-        <p class="text-xs text-slate-500 mt-0.5">
+    <div class="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between gap-3">
+      <div class="min-w-0">
+        <h2 class="text-base font-semibold text-slate-900 tracking-tight truncate">Execution History</h2>
+        <p class="text-xs text-slate-500 mt-0.5 truncate">
           Showing {{ runs.length }} of {{ total }} recorded bot execution runs.
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex items-center gap-2 shrink-0">
         <button
           @click="emit('refresh')"
           :disabled="loading"
-          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md transition disabled:opacity-50"
+          class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-md transition disabled:opacity-50 shrink-0"
           title="Refresh run history"
         >
           <svg
@@ -72,14 +74,14 @@ function truncateId(id: string): string {
       </div>
     </div>
 
-    <div class="px-5 py-2.5 bg-slate-50/70 border-b border-slate-100 flex items-center gap-1 overflow-x-auto text-xs">
-      <span class="text-slate-400 mr-2 font-medium">Filter:</span>
+    <div class="px-4 sm:px-5 py-2.5 bg-slate-50/70 border-b border-slate-100 flex items-center gap-1.5 overflow-x-auto text-xs whitespace-nowrap">
+      <span class="text-slate-400 mr-1 font-medium shrink-0">Filter:</span>
       <button
         v-for="s in statuses"
         :key="s.value"
         @click="emit('filter-status', s.value)"
         :class="[
-          'px-2.5 py-1 rounded font-medium transition-colors whitespace-nowrap',
+          'px-2.5 py-1 rounded font-medium transition-colors shrink-0',
           selectedStatus === s.value
             ? 'bg-slate-900 text-white'
             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/60'
@@ -90,7 +92,7 @@ function truncateId(id: string): string {
     </div>
 
     <div class="overflow-x-auto">
-      <table class="w-full text-left text-xs border-collapse">
+      <table class="w-full min-w-[680px] text-left text-xs border-collapse">
         <thead>
           <tr class="border-b border-slate-200 text-slate-400 uppercase tracking-wider font-semibold bg-slate-50/30">
             <th class="py-3 px-4">Run ID</th>
@@ -156,10 +158,20 @@ function truncateId(id: string): string {
               {{ formatDate(r.created_at) }}
             </td>
 
-            <td class="py-3.5 px-4 text-right">
-              <span class="text-brand-600 hover:text-brand-700 font-medium text-xs">
-                View &rarr;
-              </span>
+            <td class="py-3.5 px-4 text-right whitespace-nowrap">
+              <div class="inline-flex items-center justify-end gap-2">
+                <button
+                  v-if="r.status === 'pending' || r.status === 'running'"
+                  @click.stop="emit('cancel-run', r)"
+                  class="text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-0.5 rounded border border-rose-200 font-medium text-xs transition"
+                  title="Cancel run"
+                >
+                  Cancel
+                </button>
+                <span class="text-brand-600 hover:text-brand-700 font-medium text-xs">
+                  View &rarr;
+                </span>
+              </div>
             </td>
           </tr>
 

@@ -86,6 +86,9 @@ async def execute_run(run_id: uuid.UUID) -> Run:
     async with SessionLocal() as session:
         r = await session.get(Run, run_id)
         if r:
+            if r.status == RunStatus.CANCELLED:
+                return r
+
             r.status = bot_result.status
             if bot_result.metadata:
                 current = dict(r.bot_metadata or {})

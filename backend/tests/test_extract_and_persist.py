@@ -14,7 +14,7 @@ async def test_extract_and_persist_challenge_id() -> None:
     async with SessionLocal() as session:
         run = Run(
             bot_id="arcaptcha",
-            browser_mode=BrowserMode.HEADFUL,
+            browser_mode=BrowserMode.HEADLESS,
             status=RunStatus.PENDING,
         )
         session.add(run)

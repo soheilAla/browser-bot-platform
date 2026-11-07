@@ -14,8 +14,6 @@ By conducting **differential network analysis** between manual desktop Chrome an
 3. Four client-side detection checks were identified as relevant signals during the investigation. Their individual contribution to the server-side blocking decision has not been independently established.
 4. Systematic mitigations shifting the server verdict from `captcha_type: "block"` to `captcha_type: "puzzle"`, achieving a **100% unblock rate**.
 
----
-
 ## 2. Investigation Timeline
 
 ### Phase 1: Naive Automation (Failed)
@@ -25,12 +23,10 @@ By conducting **differential network analysis** between manual desktop Chrome an
 
 ### Phase 2: Generic Checker Validation (Misleading)
 
-- Tested browser against cleantalk.org/am-i-a-bot and deviceandbrowserinfo.com/are_you_a_bot.
+- Tested browser against [CleanTalk](https://cleantalk.org/am-i-a-bot) and [DeviceAndBrowserInfo](https://deviceandbrowserinfo.com/are_you_a_bot).
 - Flagged on `navigator.webdriver = true` and `$cdc_` document keys.
 - Naively added CDP hook: `Object.defineProperty(navigator, "webdriver", { get: () => undefined })`.
 - **Result:** "CleanTalk" and "Device and browser info" couldn't detect the bot, but **ARCaptcha still blocked immediately**.
-
----
 
 ## 3. Differential Network Analysis (Desktop vs. noVNC)
 
@@ -45,8 +41,6 @@ I compared Fetch/XHR traffic between **Manual Host Chrome (Human / Allowed)** an
 | Outcome            | Slider puzzle modal renders                   | `"Blocked! Are you robot?"`                   |
 
 Both sessions posted to `POST /arcaptcha/api/create` with encrypted payload initiated by `checkbox.js`.
-
----
 
 ## 4. Locating the Decision Gate in `checkbox.js` (Lines 37572–37716)
 
@@ -167,13 +161,11 @@ Using the AI agent to trace detectors in `checkbox.js`, I isolated 4 signals tha
   2. Inject CDP hook aligning `Screen.prototype` width/height to 1920x1080.
   3. Set `Notification.permission = "default"`.
 
----
-
 ## 6. Empirical Benchmark & Reproducibility (Bonus Evidence)
 
 To satisfy the challenge bonus requirement (_"Explain the approach and provide evidence of its success rate"_), I executed empirical benchmark trials comparing standard Selenium configurations against my stealth containerized setup.
 
-### 7.1 Empirical Ablation Study
+### 6.1 Empirical Ablation Study
 
 To evaluate which specific changes caused the block vs. unblock, I tested each configuration across empirical trials:
 
@@ -184,7 +176,7 @@ To evaluate which specific changes caused the block vs. unblock, I tested each c
 | **C. Binary Patch + Native Flags** | Patched binary (`dog_`) + `--disable-blink-features=AutomationControlled` (no WebGL flags) | 5      | 0                                 | 5                                    | **100%**              | Core block resolved; unblocks challenge modal              |
 | **D. Full Production Setup**       | Binary patch + Native flags + Software WebGL flags                                         | 5      | 0                                 | 5                                    | **100%**              | Hardened fingerprint; populates Mesa WebGL vendor/renderer |
 
-### 7.2 Independent Verification Command
+### 6.2 Independent Verification Command
 
 Reviewers can verify the 100% unblocked rate directly from `backend/`:
 
@@ -198,9 +190,7 @@ or
 docker compose exec api python tests/benchmark.py --trials 10 --mode headful
 ```
 
----
-
-## 8. Truthful & Non-Deceptive Reporting Guarantee
+## 7. Reporting Guarantee
 
 The challenge specification mandates:
 
@@ -208,5 +198,20 @@ The challenge specification mandates:
 
 My platform strictly guarantees:
 
-1. **No Falsified Success:** A run is marked `SUCCESS` only if `/api/login` returns HTTP 200 and the UI displays `.Vue-Toastification__toast--success`.
-2. **Explicit Block Classification:** If the remote server triggers an unsolvable challenge or rate-limits in headless mode, the platform records `status: RunStatus.BLOCKED` and `captcha_status: CaptchaStatus.NOT_SOLVED`, preserving the extracted `challenge_id`.
+1. **No Falsified Success:** Submitting the form alone is never reported as success. A run is marked `SUCCESS` only if `/api/login` returns HTTP 200 and the UI displays `.Vue-Toastification__toast--success`.
+2. **Explicit Block vs. Failure Classification:**
+   - When the remote server triggers an anti-bot block (`"Blocked! Are you robot?"` or `captcha_type: "block"`), the platform records `status: RunStatus.BLOCKED` and `captcha_status: CaptchaStatus.NOT_SOLVED`, preserving the extracted `challenge_id`.
+   - When an interactive challenge is presented in headless mode, the platform reports `status: RunStatus.FAILED` with `captcha_status: CaptchaStatus.NOT_SOLVED` and preserves the extracted `challenge_id`.
+   - If form verification fails due to bad credentials, the platform records `status: RunStatus.FAILED` with `captcha_status: CaptchaStatus.VERIFICATION_FAILED`.
+
+---
+
+### Tiny Note: Demo Login Behavior
+
+During testing, I noticed that the demo login form accepts credentials if either the username or password equals `demo`, even when the other field contains an arbitrary value.
+
+Observed cases:
+
+- `demo` / `random_password` → Success
+- `random_username` / `demo` → Success
+- `random_username` / `random_password` → Failure

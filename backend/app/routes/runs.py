@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import func, select
@@ -113,3 +114,48 @@ async def get_run_events(
     events = result.scalars().all()
 
     return events
+
+
+@router.post("/{run_id}/cancel", response_model=RunResponse)
+async def cancel_run(
+    run_id: uuid.UUID,
+    session: AsyncSession = Depends(get_session),
+):
+    run = await session.get(Run, run_id)
+    if not run:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Run '{run_id}' not found",
+        )
+
+    active_statuses = (
+        RunStatus.PENDING,
+        RunStatus.RUNNING,
+        RunStatus.AWAITING_CHALLENGE,
+    )
+    if run.status not in active_statuses:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Cannot cancel run with status '{run.status}'. "
+                "Only active runs can be cancelled."
+            ),
+        )
+
+    now = datetime.now(UTC)
+    run.status = RunStatus.CANCELLED
+    run.finished_at = now
+    run.error_message = "Cancelled by user"
+
+    session.add(
+        RunEvent(
+            run_id=run.id,
+            event_type="cancelled",
+            message="Run cancelled by user",
+            created_at=now,
+        )
+    )
+    await session.commit()
+    await session.refresh(run)
+
+    return run

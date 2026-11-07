@@ -2,6 +2,7 @@ import uuid
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import delete
 
 from app.core.db import SessionLocal
 from app.main import app
@@ -51,17 +52,22 @@ async def test_get_bot_detail(client: AsyncClient) -> None:
 @pytest.mark.asyncio
 async def test_create_run_success(client: AsyncClient) -> None:
     payload = {
-        "bot_id": "arcaptcha",
-        "browser_mode": "headful",
+        "bot_id": "test_bot",
+        "browser_mode": "headless",
     }
     response = await client.post("/api/runs", json=payload)
     assert response.status_code == 201
     data = response.json()
-    assert data["bot_id"] == "arcaptcha"
-    assert data["browser_mode"] == "headful"
+    assert data["bot_id"] == "test_bot"
+    assert data["browser_mode"] == "headless"
     assert data["status"] == "pending"
     assert data["bot_metadata"] == {}
     assert "id" in data
+    run_id = uuid.UUID(data["id"])
+
+    async with SessionLocal() as session:
+        await session.execute(delete(Run).where(Run.id == run_id))
+        await session.commit()
 
 
 @pytest.mark.asyncio
@@ -96,8 +102,8 @@ async def test_list_and_filter_runs(client: AsyncClient) -> None:
 async def test_get_run_and_events(client: AsyncClient) -> None:
     async with SessionLocal() as session:
         run = Run(
-            bot_id="arcaptcha",
-            browser_mode=BrowserMode.HEADFUL,
+            bot_id="test_bot",
+            browser_mode=BrowserMode.HEADLESS,
             status=RunStatus.PENDING,
             bot_metadata={"test_key": "test_val"},
         )
@@ -115,19 +121,56 @@ async def test_get_run_and_events(client: AsyncClient) -> None:
         )
         await session.commit()
 
-    res_run = await client.get(f"/api/runs/{run_id}")
-    assert res_run.status_code == 200
-    run_data = res_run.json()
-    assert run_data["id"] == str(run_id)
-    assert run_data["bot_metadata"] == {"test_key": "test_val"}
+    try:
+        res_run = await client.get(f"/api/runs/{run_id}")
+        assert res_run.status_code == 200
+        run_data = res_run.json()
+        assert run_data["id"] == str(run_id)
+        assert run_data["bot_metadata"] == {"test_key": "test_val"}
 
-    res_events = await client.get(f"/api/runs/{run_id}/events")
-    assert res_events.status_code == 200
-    events = res_events.json()
-    assert len(events) >= 1
-    assert events[0]["event_type"] == "test_event"
-    assert events[0]["message"] == "This is a test event"
+        res_events = await client.get(f"/api/runs/{run_id}/events")
+        assert res_events.status_code == 200
+        events = res_events.json()
+        assert len(events) >= 1
+        assert events[0]["event_type"] == "test_event"
+        assert events[0]["message"] == "This is a test event"
 
-    missing_id = uuid.uuid4()
-    res_missing = await client.get(f"/api/runs/{missing_id}")
-    assert res_missing.status_code == 404
+        missing_id = uuid.uuid4()
+        res_missing = await client.get(f"/api/runs/{missing_id}")
+        assert res_missing.status_code == 404
+    finally:
+        async with SessionLocal() as session:
+            await session.execute(delete(Run).where(Run.id == run_id))
+            await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_cancel_pending_run(client: AsyncClient) -> None:
+    create_res = await client.post(
+        "/api/runs", json={"bot_id": "test_bot", "browser_mode": "headless"}
+    )
+    assert create_res.status_code == 201
+    run_id = uuid.UUID(create_res.json()["id"])
+
+    try:
+        cancel_res = await client.post(f"/api/runs/{run_id}/cancel")
+        assert cancel_res.status_code == 200
+        data = cancel_res.json()
+        assert data["status"] == "cancelled"
+        assert data["error_message"] == "Cancelled by user"
+        assert data["finished_at"] is not None
+
+        events_res = await client.get(f"/api/runs/{run_id}/events")
+        assert events_res.status_code == 200
+        events = events_res.json()
+        event_types = [e["event_type"] for e in events]
+        assert "cancelled" in event_types
+
+        # Attempting to cancel again should fail with 400
+        cancel_again = await client.post(f"/api/runs/{run_id}/cancel")
+        assert cancel_again.status_code == 400
+        assert "Only active runs can be cancelled" in cancel_again.json()["detail"]
+    finally:
+        async with SessionLocal() as session:
+            await session.execute(delete(Run).where(Run.id == run_id))
+            await session.commit()

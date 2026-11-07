@@ -8,9 +8,13 @@ const props = defineProps<{
   events: RunEvent[];
   open: boolean;
   loadingEvents: boolean;
+  cancelling?: boolean;
 }>();
 
-const emit = defineEmits<(e: "close") => void>();
+const emit = defineEmits<{
+  (e: "close"): void;
+  (e: "cancel", run: Run): void;
+}>();
 
 function handleKeyDown(e: KeyboardEvent) {
   if (e.key === "Escape" && props.open) {
@@ -177,7 +181,17 @@ const captchaStatus = computed(() => props.run?.bot_metadata?.captcha_status || 
         </div>
       </div>
 
-      <div class="px-6 py-3 border-t border-slate-100 bg-slate-50 flex justify-end">
+      <div class="px-6 py-3 border-t border-slate-100 bg-slate-50 flex items-center justify-between">
+        <div>
+          <button
+            v-if="run.status === 'pending' || run.status === 'running'"
+            @click="emit('cancel', run)"
+            :disabled="cancelling"
+            class="px-3.5 py-1.5 text-xs font-medium text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-md shadow-sm transition disabled:opacity-50"
+          >
+            {{ cancelling ? "Cancelling..." : "Cancel Run" }}
+          </button>
+        </div>
         <button
           @click="emit('close')"
           class="px-4 py-1.5 text-xs font-medium text-slate-700 bg-white hover:bg-slate-100 border border-slate-200 rounded-md shadow-sm transition"

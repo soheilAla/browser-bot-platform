@@ -2,8 +2,6 @@
 
 An extensible web platform for running and monitoring browser bots with persistent execution history, headless/headful modes, and live browser streaming via noVNC.
 
----
-
 ## 1. Quick Start & Deployment
 
 ### Prerequisites
@@ -16,13 +14,13 @@ An extensible web platform for running and monitoring browser bots with persiste
 ### Setup
 
 ```bash
-git clone git@github.com:soheilAla/browser-bot-platform.git
-cd browser_bot_platform
+git clone https://github.com/soheilAla/browser-bot-platform.git
+cd browser-bot-platform
 
 cp .env.example .env
 ```
 
-Set credentials and database password in `.env`.
+Set bot credentials and database password in `.env`.
 
 ```bash
 docker compose up -d --build
@@ -36,8 +34,6 @@ Verify services:
 docker compose ps
 ```
 
----
-
 ## 2. Platform Usage
 
 ### Access Points
@@ -46,13 +42,14 @@ docker compose ps
 - **REST API Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **Live Browser Stream (noVNC):** [http://localhost:7900/?autoconnect=1](http://localhost:7900/?autoconnect=1)
 
-### Running a Bot
+### Running & Cancelling a Bot
 
 1. Open the Web Dashboard at `http://localhost:3000`.
 2. Select **Arcaptcha Demo (`arcaptcha`)** from the dropdown.
 3. Choose **Headful** or **Headless** mode, then click **Trigger Run**.
-4. Click on any run row in the history table to inspect details:
-   - Status
+4. Active runs can be cancelled at any time by clicking **Cancel** in the table row or inside the detail modal.
+5. Click on any run row in the history table to inspect details:
+   - Status (`SUCCESS`, `BLOCKED`, `FAILED`, `CANCELLED`)
    - Duration and timestamps
    - Extracted `challenge_id` and `captcha_status`
    - Real-time audit event timeline
@@ -69,57 +66,118 @@ The browser runs inside an Xvfb virtual display exported via noVNC on port `7900
   ```
   Then open `http://localhost:3000`, `http://localhost:8000/docs`, and `http://localhost:7900/?autoconnect=1` locally.
 
-_Note on interactive challenges:_ In headful mode, if a puzzle modal appears, the bot pauses and waits up to 45 seconds for a manual solve in the viewer before proceeding with form submission. In headless mode, it records the extracted `challenge_id` and safely reports the outcome.
-
----
+_Note on interactive challenges:_ In headful mode, if a puzzle modal appears, the bot pauses and waits up to 45 seconds for a manual solve in the viewer before proceeding with form submission. In headless mode, it records the extracted `challenge_id` and skips CAPTCHA solving.
 
 ## 3. Extensibility Guide: Adding a New Bot
 
-Bot implementations are decoupled from the platform core, storage, and UI. Adding a new bot requires no changes to database schemas or API routes.
+The platform decouples bot logic from execution orchestration, persistent storage, and API contracts.
 
-### Step 1: Create the Bot Class
+Adding a new bot requires **zero modifications** to database tables, migration scripts, or frontend components. The Web UI dynamically fetches available bots from `GET /api/bots` and automatically adds the new bot to the launch dropdown.
 
-Subclass `BaseBot` (`backend/app/bots/base.py`):
+### Step 1: Define Bot Settings & Secrets (Optional)
+
+If your bot requires target URLs, credentials, or API keys, isolate them in `backend/app/bots/settings/<bot_id>.py` using `pydantic-settings`. Do **not** modify platform core settings (`app/core/config.py`).
+
+```python
+# backend/app/bots/settings/quotes.py
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+class QuotesBotSettings(BaseSettings):
+    target_url: str
+    api_key: str
+
+    model_config = SettingsConfigDict(
+        env_prefix="QUOTES_",
+        env_file=("../.env", ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+quotes_settings = QuotesBotSettings() # type: ignore
+```
+
+Add secrets to the `.env` (e.g. `QUOTES_API_KEY=xyz`).
+
+### Step 2: Define Metadata Schema (Optional)
+
+Platform storage uses a PostgreSQL `JSONB` column (`runs.bot_metadata`) to store bot-specific telemetry without altering SQL tables. Define a Pydantic schema in `backend/app/schemas/<bot_id>.py` to model your bot's metadata contract:
+
+```python
+# backend/app/schemas/quotes.py
+from pydantic import BaseModel
+
+class QuotesMetadata(BaseModel):
+    quotes_extracted: int = 0
+    top_author: str | None = None
+```
+
+### Step 3: Implement the Bot Class
+
+Subclass `BaseBot` (`backend/app/bots/base.py`) and implement `run(self, context: BotContext) -> BotResult`:
 
 ```python
 # backend/app/bots/implementations/quotes_bot.py
 from selenium.webdriver.common.by import By
 from app.bots.base import BaseBot, BotResult
 from app.bots.context import BotContext
+from app.bots.settings.quotes import quotes_settings
 from app.browsers.selenium_factory import create_driver
 from app.core.config import settings
 from app.models import RunStatus
+from app.schemas.quotes import QuotesMetadata
 
 class QuotesBot(BaseBot):
-    bot_id = "quotes_bot"
-    name = "Quotes Scraper"
+    bot_id = "quotes_bot"      # Unique identifier used in API and database
+    name = "Quotes Scraper"    # Display name in Web UI dropdown
 
     def run(self, context: BotContext) -> BotResult:
+        # 1. Initialize standardized Remote WebDriver
         driver = create_driver(context.browser_mode, settings.selenium_remote_url)
         try:
-            context.log("navigating", "Opening target URL")
-            driver.get("https://quotes.toscrape.com")
+            # 2. Log timeline events in real time (persisted to run_events table)
+            context.log("navigating", f"Opening {quotes_settings.target_url}")
+            driver.get(quotes_settings.target_url)
 
-            quote = driver.find_element(By.CSS_SELECTOR, ".quote .text").text
-            context.log("extracted", f"Found quote: {quote[:30]}...")
+            quote_elements = driver.find_elements(By.CSS_SELECTOR, ".quote")
+            first_quote = quote_elements[0].find_element(By.CSS_SELECTOR, ".text").text
+            author = quote_elements[0].find_element(By.CSS_SELECTOR, ".author").text
+            context.log("extracted", f"Scraped top quote by {author}")
 
-            # Persist bot-specific telemetry into JSONB metadata
-            context.update_metadata({"quote": quote})
+            # 3. Incrementally update JSONB metadata in DB during execution
+            meta = QuotesMetadata(quotes_extracted=len(quote_elements), top_author=author)
+            context.update_metadata(meta.model_dump())
 
+            # 4. Return outcome with final status
             return BotResult(
                 status=RunStatus.SUCCESS,
-                message="Quote extracted successfully",
-                metadata={"status": "complete"}
+                message=f"Successfully scraped {len(quote_elements)} quotes",
+                metadata=meta.model_dump(),
             )
         except Exception as e:
-            return BotResult(status=RunStatus.FAILED, message=str(e))
+            context.log("error", f"Extraction failed: {e}")
+            return BotResult(
+                status=RunStatus.FAILED,
+                message=str(e),
+            )
         finally:
+            # 5. Always clean up browser session
             driver.quit()
 ```
 
-### Step 2: Register the Bot
+#### Lifecycle & Context Contract
 
-Register the bot in `backend/app/bots/registry.py`:
+| Object / Method                 | Purpose                                                                                                                                                                           |
+| :------------------------------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `context.browser_mode`          | Runtime mode: `BrowserMode.HEADFUL` or `BrowserMode.HEADLESS`.                                                                                                                    |
+| `context.update_metadata(dict)` | Atomically patches `runs.bot_metadata` in PostgreSQL in real time. Critical for saving challenge IDs or tokens mid-run before potential network failures or worker interruptions. |
+| `context.log(event_type, msg)`  | Inserts a timestamped audit event into `run_events` table (rendered in Web UI modal).                                                                                             |
+| `BotResult.status`              | Final run status: `RunStatus.SUCCESS`, `RunStatus.FAILED`, or `RunStatus.BLOCKED`.                                                                                                |
+| `BotResult.message`             | Explanatory message. Set on `runs.error_message` for failed/blocked runs.                                                                                                         |
+| `BotResult.metadata`            | Final metadata merged into `runs.bot_metadata`.                                                                                                                                   |
+
+### Step 4: Register the Bot in the Platform Registry
+
+In `backend/app/bots/registry.py`:
 
 ```python
 from app.bots.implementations.quotes_bot import QuotesBot
@@ -127,19 +185,22 @@ from app.bots.implementations.quotes_bot import QuotesBot
 registry.register(QuotesBot)
 ```
 
-The bot will automatically appear in the Web UI dropdown and `GET /api/bots`.
+The platform handles the rest:
 
----
+1. `GET /api/bots` returns `quotes_bot` in the bot catalog.
+2. The Web Dashboard dropdown automatically displays **Quotes Scraper (`quotes_bot`)**.
+3. Queue worker atomically claims and executes runs via `execute_run()`.
+4. Run history, status, JSONB metadata, and audit events persist across container restarts.
 
 ## 4. Tests
 
-### Inside Docker (Recommended)
+### Inside Docker
 
 ```bash
 docker compose exec api pytest -v
 ```
 
-### Local (with uv)
+### Local with uv
 
 ```bash
 cd backend
@@ -148,13 +209,9 @@ uv run pytest -v
 
 Tests cover API endpoints, atomic queue claiming, crash recovery, JSONB metadata patching, Selenium remote connection, and `challenge_id` persistence across success and failure paths.
 
----
-
 ## 5. Anti-Bot Evasion Benchmark (Bonus)
 
 Full reverse-engineering analysis, client-side detection vectors, and the empirical ablation study are documented in [`anti-bot-investigation.md`](anti-bot-investigation.md).
-
----
 
 ## 6. Data Persistence & Troubleshooting
 

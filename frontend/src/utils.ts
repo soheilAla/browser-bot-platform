@@ -12,6 +12,8 @@ export function statusBadgeClass(status: RunStatus | string): string {
       return "bg-amber-50 text-amber-700 border-amber-200";
     case "failed":
       return "bg-rose-50 text-rose-700 border-rose-200";
+    case "cancelled":
+      return "bg-zinc-100 text-zinc-600 border-zinc-300";
     default:
       return "bg-slate-100 text-slate-600 border-slate-200";
   }

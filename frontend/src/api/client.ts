@@ -46,5 +46,9 @@ export const api = {
   },
   getRun: (runId: string) => request<Run>(`/runs/${runId}`),
   getRunEvents: (runId: string) => request<RunEvent[]>(`/runs/${runId}/events`),
+  cancelRun: (runId: string) =>
+    request<Run>(`/runs/${runId}/cancel`, {
+      method: "POST",
+    }),
   checkHealth: () => request<{ status: string; timestamp: string }>("/health"),
 };

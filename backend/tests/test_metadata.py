@@ -1,5 +1,6 @@
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import delete
 
 from app.bots.base import BaseBot, BotResult
 from app.bots.context import BotContext
@@ -90,13 +91,16 @@ async def test_metadata_patch_and_merge_behavior() -> None:
             assert r.bot_metadata.get("counter") == 2
     finally:
         registry._bots.pop("dummy_merge_bot", None)
+        async with SessionLocal() as session:
+            await session.execute(delete(Run).where(Run.bot_id == "dummy_merge_bot"))
+            await session.commit()
 
 
 @pytest.mark.asyncio
 async def test_runner_rejects_unclaimed_run() -> None:
     async with SessionLocal() as session:
         run = Run(
-            bot_id="arcaptcha",
+            bot_id="test_bot",
             browser_mode=BrowserMode.HEADLESS,
             status=RunStatus.PENDING,
         )

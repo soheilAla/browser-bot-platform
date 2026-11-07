@@ -38,7 +38,7 @@ function handleSubmit() {
 </script>
 
 <template>
-  <div class="bg-white rounded-lg border border-slate-200 p-6 shadow-sm">
+  <div class="bg-white rounded-lg border border-slate-200 p-5 sm:p-6 shadow-sm">
     <div class="flex items-center justify-between pb-4 mb-5 border-b border-slate-100">
       <h2 class="text-base font-semibold text-slate-900 tracking-tight">Launch Bot</h2>
       <span class="text-xs font-medium text-slate-500 uppercase tracking-wider">Configure Run</span>

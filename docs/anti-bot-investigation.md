@@ -173,7 +173,7 @@ Using the AI agent to trace detectors in `checkbox.js`, I isolated 4 signals tha
 
 To satisfy the challenge bonus requirement (_"Explain the approach and provide evidence of its success rate"_), I executed empirical benchmark trials comparing standard Selenium configurations against my stealth containerized setup.
 
-### 7.1 Empirical Ablation Study
+### 6.1 Empirical Ablation Study
 
 To evaluate which specific changes caused the block vs. unblock, I tested each configuration across empirical trials:
 
@@ -184,17 +184,23 @@ To evaluate which specific changes caused the block vs. unblock, I tested each c
 | **C. Binary Patch + Native Flags** | Patched binary (`dog_`) + `--disable-blink-features=AutomationControlled` (no WebGL flags) | 5      | 0                                 | 5                                    | **100%**              | Core block resolved; unblocks challenge modal              |
 | **D. Full Production Setup**       | Binary patch + Native flags + Software WebGL flags                                         | 5      | 0                                 | 5                                    | **100%**              | Hardened fingerprint; populates Mesa WebGL vendor/renderer |
 
-### 7.2 Independent Verification Command
+### 6.2 Independent Verification Command
 
 Reviewers can verify the 100% unblocked rate directly from `backend/`:
 
 ```bash
-uv run python tests/benchmark.py --trials 10
+uv run python tests/benchmark.py --trials 10 --mode headful
+```
+
+or
+
+```bash
+docker compose exec api python tests/benchmark.py --trials 10 --mode headful
 ```
 
 ---
 
-## 8. Truthful & Non-Deceptive Reporting Guarantee
+## 7. Truthful & Non-Deceptive Reporting Guarantee
 
 The challenge specification mandates:
 
@@ -202,5 +208,8 @@ The challenge specification mandates:
 
 My platform strictly guarantees:
 
-1. **No Falsified Success:** A run is marked `SUCCESS` only if `/api/login` returns HTTP 200 and the UI displays `.Vue-Toastification__toast--success`.
-2. **Explicit Block Classification:** If the remote server triggers an unsolvable challenge or rate-limits in headless mode, the platform records `status: RunStatus.BLOCKED` and `captcha_status: CaptchaStatus.NOT_SOLVED`, preserving the extracted `challenge_id`.
+1. **No Falsified Success:** Submitting the form alone is never reported as success. A run is marked `SUCCESS` only if `/api/login` returns HTTP 200 and the UI displays `.Vue-Toastification__toast--success`.
+2. **Explicit Block vs. Failure Classification:**
+   - When the remote server triggers an anti-bot block (`"Blocked! Are you robot?"` or `captcha_type: "block"`), the platform records `status: RunStatus.BLOCKED` and `captcha_status: CaptchaStatus.NOT_SOLVED`, preserving the extracted `challenge_id`.
+   - When an interactive challenge is presented in headless mode without automated solving, the platform reports `status: RunStatus.FAILED` with `captcha_status: CaptchaStatus.NOT_SOLVED` and preserves the extracted `challenge_id`.
+   - If form verification fails due to bad credentials, the platform records `status: RunStatus.FAILED` with `captcha_status: CaptchaStatus.VERIFICATION_FAILED`.
